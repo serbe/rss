@@ -1,78 +1,42 @@
-use std::io::{Error, ErrorKind};
+// use std::io::{Error, ErrorKind};
 
-use futures::future::{ok, Future};
-use futures::stream::Stream;
-use tokio::io::{read_exact, write_all};
-use tokio::net::{TcpListener, TcpStream};
-use futures::sink::Sink;
-use tokio::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
-use tokio::io::{AsyncRead, ReadHalf, WriteHalf};
-use tokio_serde_json::{ReadJson, WriteJson};
+use crossbeam::channel::unbounded;
+use dotenv::{dotenv, var};
 
-use errors::RpcError;
-use messages::{Response, Request};
+// use errors::RpcError;
+use manager::Manager;
+use pgdb::PgDb;
+use server::s;
+use worker::Worker;
 
-mod messages;
 mod errors;
+mod manager;
+mod messages;
+mod pgdb;
+mod proxy;
+mod server;
+mod types;
+mod utils;
+mod worker;
 
-pub type Result<T> = std::result::Result<T, RpcError>;
-
-fn serve(tcp: TcpStream) -> impl Future<Item = (), Error = RpcError> {
-    let (read_half, write_half) = tcp.split();
-    let read_json = ReadJson::new(FramedRead::new(read_half, LengthDelimitedCodec::new()));
-    let resp_stream = read_json
-        .map_err(RpcError::from)
-        .and_then(
-            move |req| -> Box<dyn Future<Item = Response, Error = RpcError> + Send> {
-                match req {
-                    Request::Get(num) => {
-                        println!("get {}", num);
-                        Box::new(ok(Response::Urls(Vec::new())))
-                    },
-                    Request::GetAnon(num) => {
-                        println!("get anon {}", num);
-                        Box::new(ok(Response::Urls(Vec::new())))
-                    },
-                    Request::Set(values) => {
-                        println!("set {:?}", values);
-                        Box::new(ok(Response::Set))
-                    }
-                    Request::Join => {
-                        println!("join");
-                        Box::new(ok(Response::Join))
-                    }
-                }
-            },
-        )
-        .then(|resp| -> Result<Response> {
-            match resp {
-                Ok(resp) => Ok(resp),
-                Err(e) => Ok(Response::Err(format!("{}", e))),
-            }
-        });
-    let write_json = WriteJson::new(FramedWrite::new(write_half, LengthDelimitedCodec::new()));
-    write_json
-        .sink_map_err(RpcError::from)
-        .send_all(resp_stream)
-        .map(|_| ())
-}
+// pub type Result<T> = std::result::Result<T, RpcError>;
 
 fn main() {
-    let addr = "127.0.0.1:10001".parse().unwrap();
+    dotenv().ok();
+    let sled = var("SLED").expect("No found variable sled like SLED in environment");
 
-    let listener = TcpListener::bind(&addr).expect("unable to bind TCP listener");
+    let (server_s, manager_r) = unbounded();
+    let (manager_s, worker_r) = unbounded();
+    let (worker_s, saver_r) = unbounded();
 
-    let server = listener
-        .incoming()
-        .map_err(|e| eprintln!("failed to accept stream; error = {:?}", e))
-        .for_each(move |socket| {
-            println!("new socket!  {}", socket.peer_addr().unwrap());
-            // The initial greeting from the client
-            //      field 1: version, 1 byte (0x01 for this version)
-            //      field 2: number of authentication methods supported, 1 byte
-            
-            serve(socket).map_err(|e| eprintln!("failed to accept stream; error = {:?}", e))
-        });
+    // Manager::start(manager_r, manager_s, cfg.sled)?;
+    Manager::start(manager_r, manager_s).unwrap();
+
+    Worker::start(worker_r, worker_s);
+
+    PgDb::start(saver_r);
+
+    let server = s();
 
     tokio::run(server);
 }

@@ -1,4 +1,5 @@
 use std::io;
+use std::num::ParseIntError;
 use std::string::FromUtf8Error;
 
 use failure::Fail;
@@ -13,8 +14,32 @@ pub enum RpcError {
     // UnexpectedCommandType,
     #[fail(display = "UTF-8 error: {}", _0)]
     Utf8(#[cause] FromUtf8Error),
-    #[fail(display = "{}", _0)]
-    StringError(String),
+    // #[fail(display = "{}", _0)]
+    // StringError(String),
+    #[fail(display = "reqwest error: {}", _0)]
+    Reqwest(#[cause] reqwest::Error),
+    #[fail(display = "postgres error: {}", _0)]
+    Postgres(#[cause] postgres::Error),
+    #[fail(display = "hostname contain fragment: {}", _0)]
+    ParseFragment(String),
+    #[fail(display = "hostname contain query: {}", _0)]
+    ParseQuery(String),
+    #[fail(display = "not parse scheme: {}", _0)]
+    ParseBadScheme(String),
+    #[fail(display = "hostname not contain scheme: {}", _0)]
+    ParseMissingScheme(String),
+    #[fail(display = "user info in hostname not supported {}", _0)]
+    ParseBadUserInfo(String),
+    #[fail(display = "{} hostname contain path {}", _0, _1)]
+    ParseHavePath(String, String),
+    #[fail(display = "not parse host: {}", _0)]
+    ParseHost(String),
+    #[fail(display = "not parse port: {}", _0)]
+    ParsePort(String),
+    #[fail(display = "not parse ipv6: {}", _0)]
+    ParseIpv6(String),
+    #[fail(display = "parse int error: {}", _0)]
+    ParseInt(#[cause] ParseIntError),
 }
 
 impl From<io::Error> for RpcError {
@@ -35,4 +60,22 @@ impl From<FromUtf8Error> for RpcError {
     }
 }
 
-pub type Result<T> = std::result::Result<T, RpcError>;
+impl From<reqwest::Error> for RpcError {
+    fn from(err: reqwest::Error) -> RpcError {
+        RpcError::Reqwest(err)
+    }
+}
+
+impl From<postgres::Error> for RpcError {
+    fn from(err: postgres::Error) -> RpcError {
+        RpcError::Postgres(err)
+    }
+}
+
+impl From<ParseIntError> for RpcError {
+    fn from(err: ParseIntError) -> RpcError {
+        RpcError::ParseInt(err)
+    }
+}
+
+// pub type Result<T> = std::result::Result<T, RpcError>;
