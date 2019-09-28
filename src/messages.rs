@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::proxy::Proxy;
 
-pub type RStr = Receiver<String>;
-pub type RVecStr = Receiver<Vec<String>>;
-pub type RProxy = Receiver<Proxy>;
+// pub type RStr = Receiver<String>;
+// pub type RVecStr = Receiver<Vec<String>>;
+// pub type RProxy = Receiver<Proxy>;
 
 pub type SndSrvExt = Sender<PgExt>;
 pub type RcvSrvExt = Receiver<PgExt>;

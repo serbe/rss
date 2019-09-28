@@ -1,10 +1,12 @@
-use crossbeam::channel::{select, unbounded};
-// use sled::Db;
 use std::thread;
+
+use crossbeam::channel::{select, unbounded};
+use sled::Db;
+use dotenv::var;
 
 use crate::errors::RpcError;
 use crate::messages::{
-    PgExt, PgGetter, RVecStr, RcvPgExt, RcvSrvExt, RcvWorkExt, SndPgExt, SndSrvExt, SndWorkExt,
+    PgExt, RcvPgExt, RcvSrvExt, RcvWorkExt, SndPgExt, SndSrvExt, SndWorkExt,
     WorkExt,
 };
 use crate::pgdb::PgDb;
@@ -17,9 +19,7 @@ pub struct Manager {
     w_receiver: RcvWorkExt,
     pg_sender: SndPgExt,
     pg_receiver: RcvPgExt,
-    // server: RVecStr,
-    // workers: SStr,
-    // db: Db,
+    sled: Db,
 }
 
 impl Manager {
@@ -30,11 +30,9 @@ impl Manager {
         w_receiver: RcvWorkExt,
         pg_sender: SndPgExt,
         pg_receiver: RcvPgExt,
-        // server: RVecStr,
-        // workers: SStr,
-        // db_name: String,
     ) -> Result<Manager, RpcError> {
-        // let db = Db::open(db_name).map_err(|e| e.to_string())?;
+        let sled_db_name = var("SLED").expect("No found variable sled like SLED in environment");
+        let sled = Db::open(sled_db_name).map_err(RpcError::Sled)?;
         Ok(Manager {
             srv_sender,
             srv_receiver,
@@ -42,14 +40,13 @@ impl Manager {
             w_receiver,
             pg_sender,
             pg_receiver,
-            // db,
+            sled,
         })
     }
 
     pub fn start(
         srv_sender: SndSrvExt,
         srv_receiver: RcvSrvExt,
-        // db_name: String,
     ) -> Result<(), RpcError> {
         let (worker_s, worker_r) = unbounded();
         Worker::start(worker_s.clone(), worker_r.clone());
@@ -66,14 +63,14 @@ impl Manager {
                 recv(self.srv_receiver) -> msg => match msg {
                     Ok(PgExt::Urls(url_list)) => {
                         for url in url_list {
-                            // if self.db.insert(url.clone(), b"") == Ok(None) {
+                            if self.sled.insert(url.clone(), b"") == Ok(None) {
                                 if url.contains("://") {
                                     let _ = self.w_sender.send(WorkExt::Url(url));
                                 } else {
                                     let _ = self.w_sender.send(WorkExt::Url(format!("http://{}", url)));
                                     let _ = self.w_sender.send(WorkExt::Url(format!("socks5://{}", url)));
                                 }
-                            // }
+                            }
                         }
                     },
                     _ => (),
@@ -82,7 +79,13 @@ impl Manager {
                     if let Ok(WorkExt::Proxy(proxy)) = msg {
                         let _ = self.pg_sender.send(PgExt::Proxy(proxy));
                     }
-                }
+                },
+                recv(self.pg_receiver) -> msg => match msg {
+                    Ok(PgExt::Urls(url_list)) => {
+                        let _ = self.srv_sender.send(PgExt::Urls(url_list));
+                    },
+                    _ => (),
+                },
             }
         }
     }

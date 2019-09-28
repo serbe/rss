@@ -20,7 +20,6 @@ mod worker;
 
 fn main() {
     dotenv().ok();
-    // let sled = var("SLED").expect("No found variable sled like SLED in environment");
 
     // let (server_s, manager_r) = unbounded();
     // let (manager_s, worker_r) = unbounded();

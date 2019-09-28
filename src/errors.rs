@@ -40,6 +40,8 @@ pub enum RpcError {
     ParseIpv6(String),
     #[fail(display = "parse int error: {}", _0)]
     ParseInt(#[cause] ParseIntError),
+    #[fail(display = "sled error: {}", _0)]
+    Sled(#[cause] sled::Error),
 }
 
 impl From<io::Error> for RpcError {
