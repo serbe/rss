@@ -6,31 +6,34 @@ use postgres::{Connection, TlsMode};
 
 use crate::errors::RpcError;
 use crate::proxy::Proxy;
-use crate::types::RProxy;
+use crate::types::{RcvPgExt, SndPgExt, PgExt, PgGetter};
 
 pub struct PgDb {
     pub db: Connection,
-    pub workers: RProxy,
+    pub receiver: RcvPgExt,
+    pub sender: SndPgExt,
 }
 
 impl PgDb {
-    fn new(db: Connection, workers: Receiver<Proxy>) -> Self {
-        PgDb { db, workers }
+    fn new(db: Connection, receiver: RcvPgExt, sender: SndPgExt) -> Self {
+        PgDb { db, receiver, sender }
     }
 
-    pub fn start(workers: Receiver<Proxy>) {
+    pub fn start(receiver: RcvPgExt, sender: SndPgExt) {
         let db = get_connection().expect("error in connecting to pg db");
-        let pg_db = PgDb::new(db, workers);
+        let pg_db = PgDb::new(db, receiver, sender);
         thread::spawn(move || pg_db.run());
     }
 
     fn run(&self) {
         loop {
             select! {
-                recv(self.workers) -> msg => {
-                    if let Ok(proxy) = msg {
-                        let _ = insert_or_update(&self.db, proxy);
-                    }
+                recv(self.receiver) -> msg => match msg {
+                    Ok(PgExt::Proxy(proxy)) => {insert_or_update(&self.db, proxy);},
+                    Ok(PgExt::Get(getter)) => {
+                        let urls = ();
+                    },
+                    _ => (),
                 }
             }
         }

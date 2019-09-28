@@ -32,7 +32,7 @@ fn main() {
     // Manager::start(manager_r, manager_s, cfg.sled)?;
     Manager::start(manager_r, manager_s).unwrap();
 
-    Worker::start(worker_r, worker_s);
+    // Worker::start(worker_r, worker_s);
 
     PgDb::start(saver_r);
 

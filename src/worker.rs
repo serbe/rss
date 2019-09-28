@@ -4,14 +4,14 @@ use std::thread;
 
 use crate::proxy::{check_proxy};
 use crate::utils::my_ip;
-use crate::types::{RStr, SProxy};
+use crate::types::{RcvWorkExt, SndWorkExt, WorkExt};
 
 pub struct Worker {
     pub id: usize,
     pub ip: String,
     pub target: String,
-    pub server: RStr,
-    pub db_saver: SProxy,
+    pub receiver: RcvWorkExt,
+    pub sender: SndWorkExt,
 }
 
 impl Worker {
@@ -19,19 +19,19 @@ impl Worker {
         id: usize,
         ip: String,
         target: String,
-        server: RStr,
-        db_saver: SProxy,
+        receiver: RcvWorkExt,
+        sender: SndWorkExt,
     ) -> Self {
         Worker {
             id,
             ip,
             target,
-            server,
-            db_saver,
+            receiver,
+            sender,
         }
     }
 
-    pub fn start(worker_r: RStr, worker_s: SProxy) {
+    pub fn start(w_receiver: RcvWorkExt, w_sender: SndWorkExt) {
         let target = var("TARGET")
             .expect("No found variable target like http://targethost:433/path in environment");
         let num_workers = var("WORKERS")
@@ -40,12 +40,12 @@ impl Worker {
             .expect("wrong variable workers in environment");
         let ip = my_ip().expect("error get ip");
         for i in 0..num_workers {
-            let r = worker_r.clone();
-            let s = worker_s.clone();
+            let receiver = w_receiver.clone();
+            let sender = w_sender.clone();
             let ip = ip.clone();
             let target = target.clone();
             thread::spawn(move || {
-                let worker = Worker::new(i, ip, target, r, s);
+                let worker = Worker::new(i, ip, target, receiver, sender);
                 worker.run();
             });
         }
@@ -54,10 +54,10 @@ impl Worker {
     fn run(&self) {
         loop {
             select! {
-                recv(self.server) -> msg => {
-                    if let Ok(proxy_url) = msg {
+                recv(self.receiver) -> msg => {
+                    if let Ok(WorkExt::Url(proxy_url)) = msg {
                         if let Ok(proxy) = check_proxy(&proxy_url, &self.target, &self.ip) {
-                            let _ = self.db_saver.send(proxy);
+                            let _ = self.sender.send(WorkExt::Proxy(proxy));
                         }
                     }
                 }
