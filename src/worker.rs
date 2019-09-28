@@ -1,10 +1,10 @@
-use crossbeam::channel::{select};
+use crossbeam::channel::select;
 use dotenv::var;
 use std::thread;
 
-use crate::proxy::{check_proxy};
-use crate::utils::my_ip;
+use crate::proxy::check_proxy;
 use crate::types::{RcvWorkExt, SndWorkExt, WorkExt};
+use crate::utils::my_ip;
 
 pub struct Worker {
     pub id: usize,
@@ -19,19 +19,19 @@ impl Worker {
         id: usize,
         ip: String,
         target: String,
-        receiver: RcvWorkExt,
         sender: SndWorkExt,
+        receiver: RcvWorkExt,
     ) -> Self {
         Worker {
             id,
             ip,
             target,
-            receiver,
             sender,
+            receiver,
         }
     }
 
-    pub fn start(w_receiver: RcvWorkExt, w_sender: SndWorkExt) {
+    pub fn start(w_sender: SndWorkExt, w_receiver: RcvWorkExt) {
         let target = var("TARGET")
             .expect("No found variable target like http://targethost:433/path in environment");
         let num_workers = var("WORKERS")
@@ -45,7 +45,7 @@ impl Worker {
             let ip = ip.clone();
             let target = target.clone();
             thread::spawn(move || {
-                let worker = Worker::new(i, ip, target, receiver, sender);
+                let worker = Worker::new(i, ip, target, sender, receiver);
                 worker.run();
             });
         }

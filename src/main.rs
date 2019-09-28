@@ -1,13 +1,11 @@
 // use std::io::{Error, ErrorKind};
 
 use crossbeam::channel::unbounded;
-use dotenv::{dotenv, var};
+use dotenv::dotenv;
 
 // use errors::RpcError;
 use manager::Manager;
-use pgdb::PgDb;
 use server::s;
-use worker::Worker;
 
 mod errors;
 mod manager;
@@ -23,18 +21,16 @@ mod worker;
 
 fn main() {
     dotenv().ok();
-    let sled = var("SLED").expect("No found variable sled like SLED in environment");
+    // let sled = var("SLED").expect("No found variable sled like SLED in environment");
 
-    let (server_s, manager_r) = unbounded();
-    let (manager_s, worker_r) = unbounded();
-    let (worker_s, saver_r) = unbounded();
-
+    // let (server_s, manager_r) = unbounded();
+    // let (manager_s, worker_r) = unbounded();
+    // let (worker_s, saver_r) = unbounded();
+    let (server_s, server_r) = unbounded();
     // Manager::start(manager_r, manager_s, cfg.sled)?;
-    Manager::start(manager_r, manager_s).unwrap();
+    Manager::start(server_s.clone(), server_r.clone()).unwrap();
 
     // Worker::start(worker_r, worker_s);
-
-    PgDb::start(saver_r);
 
     let server = s();
 
