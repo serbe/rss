@@ -2,8 +2,8 @@ use crossbeam::channel::select;
 use dotenv::var;
 use std::thread;
 
+use crate::messages::{RcvWorkExt, SndWorkExt, WorkExt};
 use crate::proxy::check_proxy;
-use crate::types::{RcvWorkExt, SndWorkExt, WorkExt};
 use crate::utils::my_ip;
 
 pub struct Worker {

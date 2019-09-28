@@ -13,7 +13,6 @@ mod messages;
 mod pgdb;
 mod proxy;
 mod server;
-mod types;
 mod utils;
 mod worker;
 
@@ -32,7 +31,7 @@ fn main() {
 
     // Worker::start(worker_r, worker_s);
 
-    let server = s();
+    let server = s(server_s, server_r);
 
     tokio::run(server);
 }

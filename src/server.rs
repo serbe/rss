@@ -8,9 +8,13 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio_serde_json::{ReadJson, WriteJson};
 
 use crate::errors::RpcError;
-use crate::messages::{Request, Response};
+use crate::messages::{RcvSrvExt, Request, Response, SndSrvExt};
 
-fn serve(tcp: TcpStream) -> impl Future<Item = (), Error = RpcError> {
+fn serve(
+    tcp: TcpStream,
+    srv_sender: SndSrvExt,
+    srv_receiver: RcvSrvExt,
+) -> impl Future<Item = (), Error = RpcError> {
     let (read_half, write_half) = tcp.split();
     let read_json = ReadJson::new(FramedRead::new(read_half, LengthDelimitedCodec::new()));
     let resp_stream = read_json
@@ -50,7 +54,7 @@ fn serve(tcp: TcpStream) -> impl Future<Item = (), Error = RpcError> {
         .map(|_| ())
 }
 
-pub fn s() -> impl Future<Item = (), Error = ()> {
+pub fn s(srv_sender: SndSrvExt, srv_receiver: RcvSrvExt) -> impl Future<Item = (), Error = ()> {
     let server_addr =
         var("SERVER").expect("No found variable SERVER like 0.0.0.0:8080 in environment");
     let addr = server_addr.parse().expect("error parse server address");
@@ -65,7 +69,7 @@ pub fn s() -> impl Future<Item = (), Error = ()> {
             // The initial greeting from the client
             //      field 1: version, 1 byte (0x01 for this version)
             //      field 2: number of authentication methods supported, 1 byte
-
-            serve(socket).map_err(|e| eprintln!("failed to accept stream; error = {:?}", e))
+            serve(socket, srv_sender.clone(), srv_receiver.clone())
+                .map_err(|e| eprintln!("failed to accept stream; error = {:?}", e))
         })
 }

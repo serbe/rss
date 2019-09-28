@@ -3,11 +3,11 @@ use crossbeam::channel::{select, unbounded};
 use std::thread;
 
 use crate::errors::RpcError;
-use crate::pgdb::PgDb;
-use crate::types::{
+use crate::messages::{
     PgExt, PgGetter, RVecStr, RcvPgExt, RcvSrvExt, RcvWorkExt, SndPgExt, SndSrvExt, SndWorkExt,
     WorkExt,
 };
+use crate::pgdb::PgDb;
 use crate::worker::Worker;
 
 pub struct Manager {
