@@ -1,83 +1,41 @@
-use std::io;
-use std::num::ParseIntError;
-use std::string::FromUtf8Error;
-
-use failure::Fail;
-
-#[derive(Fail, Debug)]
-pub enum RpcError {
-    #[fail(display = "IO error: {}", _0)]
-    Io(#[cause] io::Error),
-    #[fail(display = "serde_json error: {}", _0)]
-    Serde(#[cause] serde_json::Error),
-    // #[fail(display = "Unexpected command type")]
+#[derive(Debug, thiserror::Error)]
+pub enum RssError {
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("serde_json error: {0}")]
+    Serde(#[from] serde_json::Error),
+    // #[error("Unexpected command type")]
     // UnexpectedCommandType,
-    #[fail(display = "UTF-8 error: {}", _0)]
-    Utf8(#[cause] FromUtf8Error),
-    // #[fail(display = "{}", _0)]
+    #[error("UTF-8 error: {0}")]
+    Utf8(#[from] std::string::FromUtf8Error),
+    // #[error("{0}")]
     // StringError(String),
-    #[fail(display = "reqwest error: {}", _0)]
-    Reqwest(#[cause] reqwest::Error),
-    #[fail(display = "postgres error: {}", _0)]
-    Postgres(#[cause] postgres::Error),
-    #[fail(display = "hostname contain fragment: {}", _0)]
+    #[error("DeadPool error: {0}")]
+    DeadPool(#[from] deadpool_postgres::PoolError),
+    #[error("Netc error: {0}")]
+    Netc(#[from] netc::Error),
+    #[error("postgres error: {0}")]
+    TokioPostgres(#[from] tokio_postgres::Error),
+    #[error("hostname contain fragment: {0}")]
     ParseFragment(String),
-    #[fail(display = "hostname contain query: {}", _0)]
+    #[error("hostname contain query: {0}")]
     ParseQuery(String),
-    #[fail(display = "not parse scheme: {}", _0)]
+    #[error("not parse scheme: {0}")]
     ParseBadScheme(String),
-    #[fail(display = "hostname not contain scheme: {}", _0)]
+    #[error("hostname not contain scheme: {0}")]
     ParseMissingScheme(String),
-    #[fail(display = "user info in hostname not supported {}", _0)]
+    #[error("user info in hostname not supported {0}")]
     ParseBadUserInfo(String),
-    #[fail(display = "{} hostname contain path {}", _0, _1)]
+    #[error("{} hostname contain path {0}", _1)]
     ParseHavePath(String, String),
-    #[fail(display = "not parse host: {}", _0)]
+    #[error("not parse host: {0}")]
     ParseHost(String),
-    #[fail(display = "not parse port: {}", _0)]
+    #[error("not parse port: {0}")]
     ParsePort(String),
-    #[fail(display = "not parse ipv6: {}", _0)]
+    #[error("not parse ipv6: {0}")]
     ParseIpv6(String),
-    #[fail(display = "parse int error: {}", _0)]
-    ParseInt(#[cause] ParseIntError),
-    #[fail(display = "sled error: {}", _0)]
-    Sled(#[cause] sled::Error),
+    #[error("parse int error: {0}")]
+    ParseInt(#[from] std::num::ParseIntError),
+    #[error("sled error: {0}")]
+    Sled(#[from] sled::Error),
 }
-
-impl From<io::Error> for RpcError {
-    fn from(err: io::Error) -> RpcError {
-        RpcError::Io(err)
-    }
-}
-
-impl From<serde_json::Error> for RpcError {
-    fn from(err: serde_json::Error) -> RpcError {
-        RpcError::Serde(err)
-    }
-}
-
-impl From<FromUtf8Error> for RpcError {
-    fn from(err: FromUtf8Error) -> RpcError {
-        RpcError::Utf8(err)
-    }
-}
-
-impl From<reqwest::Error> for RpcError {
-    fn from(err: reqwest::Error) -> RpcError {
-        RpcError::Reqwest(err)
-    }
-}
-
-impl From<postgres::Error> for RpcError {
-    fn from(err: postgres::Error) -> RpcError {
-        RpcError::Postgres(err)
-    }
-}
-
-impl From<ParseIntError> for RpcError {
-    fn from(err: ParseIntError) -> RpcError {
-        RpcError::ParseInt(err)
-    }
-}
-
-// pub type Result<T> = std::result::Result<T, RpcError>;

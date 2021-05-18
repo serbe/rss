@@ -1,13 +1,12 @@
 use std::thread;
 
 use crossbeam::channel::{select, unbounded};
-use sled::Db;
 use dotenv::var;
+use sled::Db;
 
-use crate::errors::RpcError;
+use crate::errors::RssError;
 use crate::messages::{
-    PgExt, RcvPgExt, RcvSrvExt, RcvWorkExt, SndPgExt, SndSrvExt, SndWorkExt,
-    WorkExt,
+    PgExt, RcvPgExt, RcvSrvExt, RcvWorkExt, SndPgExt, SndSrvExt, SndWorkExt, WorkExt,
 };
 use crate::pgdb::PgDb;
 use crate::worker::Worker;
@@ -30,9 +29,9 @@ impl Manager {
         w_receiver: RcvWorkExt,
         pg_sender: SndPgExt,
         pg_receiver: RcvPgExt,
-    ) -> Result<Manager, RpcError> {
+    ) -> Result<Manager, RssError> {
         let sled_db_name = var("SLED").expect("No found variable sled like SLED in environment");
-        let sled = Db::open(sled_db_name).map_err(RpcError::Sled)?;
+        let sled = sled::open(sled_db_name)?;
         Ok(Manager {
             srv_sender,
             srv_receiver,
@@ -44,14 +43,11 @@ impl Manager {
         })
     }
 
-    pub fn start(
-        srv_sender: SndSrvExt,
-        srv_receiver: RcvSrvExt,
-    ) -> Result<(), RpcError> {
+    pub async fn start(srv_sender: SndSrvExt, srv_receiver: RcvSrvExt) -> Result<(), RssError> {
         let (worker_s, worker_r) = unbounded();
-        Worker::start(worker_s.clone(), worker_r.clone());
+        Worker::start(worker_s.clone(), worker_r.clone()).await;
         let (pgdb_s, pgdb_r) = unbounded();
-        PgDb::start(pgdb_s.clone(), pgdb_r.clone());
+        PgDb::start(pgdb_s.clone(), pgdb_r.clone()).await;
         let manager = Manager::new(srv_sender, srv_receiver, worker_s, worker_r, pgdb_s, pgdb_r)?;
         thread::spawn(move || manager.run());
         Ok(())

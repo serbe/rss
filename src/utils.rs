@@ -1,5 +1,11 @@
-use crate::errors::RpcError;
+use netc::Client;
 
-pub fn my_ip() -> Result<String, RpcError> {
-    Ok(reqwest::get("https://api.ipify.org")?.text()?)
+use crate::errors::RssError;
+
+pub async fn my_ip() -> Result<String, RssError> {
+    let mut client = Client::builder()
+        .get("https://api.ipify.org")
+        .build()
+        .await?;
+    Ok(client.send().await?.text()?)
 }

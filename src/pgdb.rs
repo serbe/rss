@@ -1,21 +1,19 @@
-use std::thread;
-
 use crossbeam::channel::select;
-use dotenv::var;
-use postgres::{Connection, TlsMode};
+use deadpool_postgres::{Manager, Pool};
+use tokio_postgres::{Config, NoTls};
 
-use crate::errors::RpcError;
+use crate::errors::RssError;
 use crate::messages::{PgExt, PgGetter, RcvPgExt, SndPgExt};
 use crate::proxy::Proxy;
 
 pub struct PgDb {
-    pub db: Connection,
+    pub db: Pool,
     pub sender: SndPgExt,
     pub receiver: RcvPgExt,
 }
 
 impl PgDb {
-    fn new(db: Connection, sender: SndPgExt, receiver: RcvPgExt) -> Self {
+    fn new(db: Pool, sender: SndPgExt, receiver: RcvPgExt) -> Self {
         PgDb {
             db,
             receiver,
@@ -23,13 +21,13 @@ impl PgDb {
         }
     }
 
-    pub fn start(sender: SndPgExt, receiver: RcvPgExt) {
-        let db = get_connection().expect("error in connecting to pg db");
+    pub async fn start(sender: SndPgExt, receiver: RcvPgExt) {
+        let db = get_pool();
         let pg_db = PgDb::new(db, sender, receiver);
-        thread::spawn(move || pg_db.run());
+        tokio::spawn(async move { pg_db.run().await });
     }
 
-    fn run(&self) {
+    async fn run(&self) {
         loop {
             select! {
                 recv(self.receiver) -> msg => match msg {
@@ -38,7 +36,7 @@ impl PgDb {
                     },
                     Ok(PgExt::Get(getter)) => {
                         let urls = self.get_list(getter);
-                        let _ = self.sender.send(PgExt::Urls(urls));
+                        let _ = self.sender.send(PgExt::Urls(urls.await));
                     },
                     _ => (),
                 }
@@ -46,8 +44,8 @@ impl PgDb {
         }
     }
 
-    fn insert_or_update(&self, proxy: Proxy) -> Result<u64, RpcError> {
-        Ok(self.db.execute(
+    async fn insert_or_update(&self, proxy: Proxy) -> Result<u64, RssError> {
+        Ok(self.db.get().await?.execute(
             "INSERT INTO
                 proxies (work, anon, checks, hostname, host, port, scheme, create_at, update_at, response)
             VALUES
@@ -69,41 +67,48 @@ impl PgDb {
                 &proxy.create_at,
                 &proxy.update_at,
                 &proxy.response,
-            ])?)
+            ]).await?)
     }
 
-    fn get_list(&self, msg: PgGetter) -> Vec<String> {
+    async fn get_list(&self, msg: PgGetter) -> Vec<String> {
         let mut proxies = Vec::new();
-        let anon = match msg.anon {
-            Some(value) => format!("AND anon = {}", value),
-            None => String::new(),
-        };
-        let hours = match msg.hours {
-            Some(value) => format!("AND update_at < (NOW() - interval '{} hour')", value),
-            None => String::new(),
-        };
-        let query = format!(
-            "SELECT
+        if let Ok(client) = self.db.get().await {
+            let anon = match msg.anon {
+                Some(value) => format!("AND anon = {}", value),
+                None => String::new(),
+            };
+            let hours = match msg.hours {
+                Some(value) => format!("AND update_at < (NOW() - interval '{} hour')", value),
+                None => String::new(),
+            };
+            let query = format!(
+                "SELECT
                 hostname
             FROM
                 proxies
             WHERE
                 work = $1 {} {} AND random() < 0.01
             LIMIT $2",
-            anon, hours
-        );
-        if let Ok(rows) = &self.db.query(&query, &[&msg.work, &msg.limit]) {
-            for row in rows {
-                let hostname: String = row.get(0);
-                proxies.push(hostname);
+                anon, hours
+            );
+
+            if let Ok(rows) = client.query(query.as_str(), &[&msg.work, &msg.limit]).await {
+                for row in rows {
+                    let hostname: String = row.get(0);
+                    proxies.push(hostname);
+                }
             }
         }
         proxies
     }
 }
 
-fn get_connection() -> Result<Connection, RpcError> {
-    let params = var("PG").expect("No found variable PG like postgresql://user[:password]@host[:port][/database][?param1=val1[[&param2=val2]...]] in environment");
-    Ok(Connection::connect(params, TlsMode::None)?)
+fn get_config() -> Config {
+    let pg_url = dotenv::var("PG_RSS").expect("No found variable PG_RS like postgresql://user[:password]@host[:port][/database][?param1=val1[[&param2=val2]...]] in environment");
+    pg_url.parse().expect("no parge config from PG_RSS")
 }
 
+pub fn get_pool() -> Pool {
+    let manager = Manager::new(get_config(), NoTls);
+    Pool::new(manager, 16)
+}
